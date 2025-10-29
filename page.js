@@ -1,18 +1,27 @@
 
-import { getEpisodeSources, getAnimeInfo } from "../../lib/kitsune";
+import { searchAnime } from "../lib/kitsune";
 
-export default async function Watch({ searchParams }) {
-  const id = searchParams?.id;
-  if (!id) return "No ID Provided";
-
-  const info = await getAnimeInfo(id);
-  const episodeId = info.episodes[0].id;
-  const player = await getEpisodeSources(episodeId);
+export default async function Home({ searchParams }) {
+  const query = searchParams?.q || "";
+  const data = query ? await searchAnime(query) : null;
 
   return (
     <main style={{ padding: 20 }}>
-      <h1>{info.title}</h1>
-      <iframe src={player.sources[0].url} width="100%" height="500"></iframe>
+      <h1>Anime Search</h1>
+      <form>
+        <input name="q" placeholder="Search anime..." defaultValue={query} />
+        <button type="submit">Search</button>
+      </form>
+
+      {data && (
+        <ul>
+          {data.results.map(anime => (
+            <li key={anime.id}>
+              <a href={`/watch?id=${anime.id}`}>{anime.title}</a>
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
