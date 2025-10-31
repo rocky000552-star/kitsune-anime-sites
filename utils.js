@@ -3,10 +3,13 @@ Object.defineProperty(exports, "__esModule", {
     value: true
 });
 0 && (module.exports = {
-    fromNodeOutgoingHttpHeaders: null,
-    splitCookiesString: null,
-    toNodeOutgoingHttpHeaders: null,
-    validateURL: null
+    printAndExit: null,
+    getDebugPort: null,
+    getNodeOptionsWithoutInspect: null,
+    getPort: null,
+    RESTART_EXIT_CODE: null,
+    checkNodeDebugType: null,
+    getMaxOldSpaceSize: null
 });
 function _export(target, all) {
     for(var name in all)Object.defineProperty(target, name, {
@@ -15,116 +18,71 @@ function _export(target, all) {
     });
 }
 _export(exports, {
-    fromNodeOutgoingHttpHeaders: function() {
-        return fromNodeOutgoingHttpHeaders;
+    printAndExit: function() {
+        return printAndExit;
     },
-    splitCookiesString: function() {
-        return splitCookiesString;
+    getDebugPort: function() {
+        return getDebugPort;
     },
-    toNodeOutgoingHttpHeaders: function() {
-        return toNodeOutgoingHttpHeaders;
+    getNodeOptionsWithoutInspect: function() {
+        return getNodeOptionsWithoutInspect;
     },
-    validateURL: function() {
-        return validateURL;
+    getPort: function() {
+        return getPort;
+    },
+    RESTART_EXIT_CODE: function() {
+        return RESTART_EXIT_CODE;
+    },
+    checkNodeDebugType: function() {
+        return checkNodeDebugType;
+    },
+    getMaxOldSpaceSize: function() {
+        return getMaxOldSpaceSize;
     }
 });
-function fromNodeOutgoingHttpHeaders(nodeHeaders) {
-    const headers = new Headers();
-    for (let [key, value] of Object.entries(nodeHeaders)){
-        const values = Array.isArray(value) ? value : [
-            value
-        ];
-        for (let v of values){
-            if (typeof v === "undefined") continue;
-            if (typeof v === "number") {
-                v = v.toString();
-            }
-            headers.append(key, v);
-        }
+function printAndExit(message, code = 1) {
+    if (code === 0) {
+        console.log(message);
+    } else {
+        console.error(message);
     }
-    return headers;
+    process.exit(code);
 }
-function splitCookiesString(cookiesString) {
-    var cookiesStrings = [];
-    var pos = 0;
-    var start;
-    var ch;
-    var lastComma;
-    var nextStart;
-    var cookiesSeparatorFound;
-    function skipWhitespace() {
-        while(pos < cookiesString.length && /\s/.test(cookiesString.charAt(pos))){
-            pos += 1;
-        }
-        return pos < cookiesString.length;
-    }
-    function notSpecialChar() {
-        ch = cookiesString.charAt(pos);
-        return ch !== "=" && ch !== ";" && ch !== ",";
-    }
-    while(pos < cookiesString.length){
-        start = pos;
-        cookiesSeparatorFound = false;
-        while(skipWhitespace()){
-            ch = cookiesString.charAt(pos);
-            if (ch === ",") {
-                // ',' is a cookie separator if we have later first '=', not ';' or ','
-                lastComma = pos;
-                pos += 1;
-                skipWhitespace();
-                nextStart = pos;
-                while(pos < cookiesString.length && notSpecialChar()){
-                    pos += 1;
-                }
-                // currently special character
-                if (pos < cookiesString.length && cookiesString.charAt(pos) === "=") {
-                    // we found cookies separator
-                    cookiesSeparatorFound = true;
-                    // pos is inside the next cookie, so back up and return it.
-                    pos = nextStart;
-                    cookiesStrings.push(cookiesString.substring(start, lastComma));
-                    start = pos;
-                } else {
-                    // in param ',' or param separator ';',
-                    // we continue from that comma
-                    pos = lastComma + 1;
-                }
-            } else {
-                pos += 1;
-            }
-        }
-        if (!cookiesSeparatorFound || pos >= cookiesString.length) {
-            cookiesStrings.push(cookiesString.substring(start, cookiesString.length));
-        }
-    }
-    return cookiesStrings;
+const getDebugPort = ()=>{
+    var _process_execArgv_find, _process_env_NODE_OPTIONS_match, _process_env_NODE_OPTIONS_match1, _process_env_NODE_OPTIONS;
+    const debugPortStr = ((_process_execArgv_find = process.execArgv.find((localArg)=>localArg.startsWith("--inspect") || localArg.startsWith("--inspect-brk"))) == null ? void 0 : _process_execArgv_find.split("=", 2)[1]) ?? ((_process_env_NODE_OPTIONS = process.env.NODE_OPTIONS) == null ? void 0 : (_process_env_NODE_OPTIONS_match1 = _process_env_NODE_OPTIONS.match) == null ? void 0 : (_process_env_NODE_OPTIONS_match = _process_env_NODE_OPTIONS_match1.call(_process_env_NODE_OPTIONS, /--inspect(-brk)?(=(\S+))?( |$)/)) == null ? void 0 : _process_env_NODE_OPTIONS_match[3]);
+    return debugPortStr ? parseInt(debugPortStr, 10) : 9229;
+};
+const NODE_INSPECT_RE = /--inspect(-brk)?(=\S+)?( |$)/;
+function getNodeOptionsWithoutInspect() {
+    return (process.env.NODE_OPTIONS || "").replace(NODE_INSPECT_RE, "");
 }
-function toNodeOutgoingHttpHeaders(headers) {
-    const nodeHeaders = {};
-    const cookies = [];
-    if (headers) {
-        for (const [key, value] of headers.entries()){
-            if (key.toLowerCase() === "set-cookie") {
-                // We may have gotten a comma joined string of cookies, or multiple
-                // set-cookie headers. We need to merge them into one header array
-                // to represent all the cookies.
-                cookies.push(...splitCookiesString(value));
-                nodeHeaders[key] = cookies.length === 1 ? cookies[0] : cookies;
-            } else {
-                nodeHeaders[key] = value;
-            }
-        }
+function getPort(args) {
+    if (typeof args["--port"] === "number") {
+        return args["--port"];
     }
-    return nodeHeaders;
+    const parsed = process.env.PORT && parseInt(process.env.PORT, 10);
+    if (typeof parsed === "number" && !Number.isNaN(parsed)) {
+        return parsed;
+    }
+    return 3000;
 }
-function validateURL(url) {
-    try {
-        return String(new URL(String(url)));
-    } catch (error) {
-        throw new Error(`URL is malformed "${String(url)}". Please use only absolute URLs - https://nextjs.org/docs/messages/middleware-relative-urls`, {
-            cause: error
-        });
+const RESTART_EXIT_CODE = 77;
+function checkNodeDebugType() {
+    var _process_env_NODE_OPTIONS_match, _process_env_NODE_OPTIONS, _process_env_NODE_OPTIONS_match1, _process_env_NODE_OPTIONS1;
+    let nodeDebugType = undefined;
+    if (process.execArgv.some((localArg)=>localArg.startsWith("--inspect")) || ((_process_env_NODE_OPTIONS = process.env.NODE_OPTIONS) == null ? void 0 : (_process_env_NODE_OPTIONS_match = _process_env_NODE_OPTIONS.match) == null ? void 0 : _process_env_NODE_OPTIONS_match.call(_process_env_NODE_OPTIONS, /--inspect(=\S+)?( |$)/))) {
+        nodeDebugType = "inspect";
     }
+    if (process.execArgv.some((localArg)=>localArg.startsWith("--inspect-brk")) || ((_process_env_NODE_OPTIONS1 = process.env.NODE_OPTIONS) == null ? void 0 : (_process_env_NODE_OPTIONS_match1 = _process_env_NODE_OPTIONS1.match) == null ? void 0 : _process_env_NODE_OPTIONS_match1.call(_process_env_NODE_OPTIONS1, /--inspect-brk(=\S+)?( |$)/))) {
+        nodeDebugType = "inspect-brk";
+    }
+    return nodeDebugType;
+}
+function getMaxOldSpaceSize() {
+    var _process_env_NODE_OPTIONS_match, _process_env_NODE_OPTIONS;
+    const maxOldSpaceSize = (_process_env_NODE_OPTIONS = process.env.NODE_OPTIONS) == null ? void 0 : (_process_env_NODE_OPTIONS_match = _process_env_NODE_OPTIONS.match(/--max-old-space-size=(\d+)/)) == null ? void 0 : _process_env_NODE_OPTIONS_match[1];
+    return maxOldSpaceSize ? parseInt(maxOldSpaceSize, 10) : undefined;
 }
 
 //# sourceMappingURL=utils.js.map
