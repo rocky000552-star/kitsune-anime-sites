@@ -3,9 +3,10 @@ Object.defineProperty(exports, "__esModule", {
     value: true
 });
 0 && (module.exports = {
-    isBlockedPage: null,
-    cleanAmpPath: null,
-    debounce: null
+    fromNodeOutgoingHttpHeaders: null,
+    splitCookiesString: null,
+    toNodeOutgoingHttpHeaders: null,
+    validateURL: null
 });
 function _export(target, all) {
     for(var name in all)Object.defineProperty(target, name, {
@@ -14,74 +15,116 @@ function _export(target, all) {
     });
 }
 _export(exports, {
-    isBlockedPage: function() {
-        return isBlockedPage;
+    fromNodeOutgoingHttpHeaders: function() {
+        return fromNodeOutgoingHttpHeaders;
     },
-    cleanAmpPath: function() {
-        return cleanAmpPath;
+    splitCookiesString: function() {
+        return splitCookiesString;
     },
-    debounce: function() {
-        return debounce;
+    toNodeOutgoingHttpHeaders: function() {
+        return toNodeOutgoingHttpHeaders;
+    },
+    validateURL: function() {
+        return validateURL;
     }
 });
-const _constants = require("../shared/lib/constants");
-function isBlockedPage(page) {
-    return _constants.BLOCKED_PAGES.includes(page);
-}
-function cleanAmpPath(pathname) {
-    if (pathname.match(/\?amp=(y|yes|true|1)/)) {
-        pathname = pathname.replace(/\?amp=(y|yes|true|1)&?/, "?");
-    }
-    if (pathname.match(/&amp=(y|yes|true|1)/)) {
-        pathname = pathname.replace(/&amp=(y|yes|true|1)/, "");
-    }
-    pathname = pathname.replace(/\?$/, "");
-    return pathname;
-}
-function debounce(fn, ms, maxWait = Infinity) {
-    let timeoutId;
-    // The time the debouncing function was first called during this debounce queue.
-    let startTime = 0;
-    // The time the debouncing function was last called.
-    let lastCall = 0;
-    // The arguments and this context of the last call to the debouncing function.
-    let args, context;
-    // A helper used to that either invokes the debounced function, or
-    // reschedules the timer if a more recent call was made.
-    function run() {
-        const now = Date.now();
-        const diff = lastCall + ms - now;
-        // If the diff is non-positive, then we've waited at least `ms`
-        // milliseconds since the last call. Or if we've waited for longer than the
-        // max wait time, we must call the debounced function.
-        if (diff <= 0 || startTime + maxWait >= now) {
-            // It's important to clear the timeout id before invoking the debounced
-            // function, in case the function calls the debouncing function again.
-            timeoutId = undefined;
-            fn.apply(context, args);
-        } else {
-            // Else, a new call was made after the original timer was scheduled. We
-            // didn't clear the timeout (doing so is very slow), so now we need to
-            // reschedule the timer for the time difference.
-            timeoutId = setTimeout(run, diff);
+function fromNodeOutgoingHttpHeaders(nodeHeaders) {
+    const headers = new Headers();
+    for (let [key, value] of Object.entries(nodeHeaders)){
+        const values = Array.isArray(value) ? value : [
+            value
+        ];
+        for (let v of values){
+            if (typeof v === "undefined") continue;
+            if (typeof v === "number") {
+                v = v.toString();
+            }
+            headers.append(key, v);
         }
     }
-    return function(...passedArgs) {
-        // The arguments and this context of the most recent call are saved so the
-        // debounced function can be invoked with them later.
-        args = passedArgs;
-        context = this;
-        // Instead of constantly clearing and scheduling a timer, we record the
-        // time of the last call. If a second call comes in before the timer fires,
-        // then we'll reschedule in the run function. Doing this is considerably
-        // faster.
-        lastCall = Date.now();
-        // Only schedule a new timer if we're not currently waiting.
-        if (timeoutId === undefined) {
-            startTime = lastCall;
-            timeoutId = setTimeout(run, ms);
+    return headers;
+}
+function splitCookiesString(cookiesString) {
+    var cookiesStrings = [];
+    var pos = 0;
+    var start;
+    var ch;
+    var lastComma;
+    var nextStart;
+    var cookiesSeparatorFound;
+    function skipWhitespace() {
+        while(pos < cookiesString.length && /\s/.test(cookiesString.charAt(pos))){
+            pos += 1;
         }
-    };
+        return pos < cookiesString.length;
+    }
+    function notSpecialChar() {
+        ch = cookiesString.charAt(pos);
+        return ch !== "=" && ch !== ";" && ch !== ",";
+    }
+    while(pos < cookiesString.length){
+        start = pos;
+        cookiesSeparatorFound = false;
+        while(skipWhitespace()){
+            ch = cookiesString.charAt(pos);
+            if (ch === ",") {
+                // ',' is a cookie separator if we have later first '=', not ';' or ','
+                lastComma = pos;
+                pos += 1;
+                skipWhitespace();
+                nextStart = pos;
+                while(pos < cookiesString.length && notSpecialChar()){
+                    pos += 1;
+                }
+                // currently special character
+                if (pos < cookiesString.length && cookiesString.charAt(pos) === "=") {
+                    // we found cookies separator
+                    cookiesSeparatorFound = true;
+                    // pos is inside the next cookie, so back up and return it.
+                    pos = nextStart;
+                    cookiesStrings.push(cookiesString.substring(start, lastComma));
+                    start = pos;
+                } else {
+                    // in param ',' or param separator ';',
+                    // we continue from that comma
+                    pos = lastComma + 1;
+                }
+            } else {
+                pos += 1;
+            }
+        }
+        if (!cookiesSeparatorFound || pos >= cookiesString.length) {
+            cookiesStrings.push(cookiesString.substring(start, cookiesString.length));
+        }
+    }
+    return cookiesStrings;
+}
+function toNodeOutgoingHttpHeaders(headers) {
+    const nodeHeaders = {};
+    const cookies = [];
+    if (headers) {
+        for (const [key, value] of headers.entries()){
+            if (key.toLowerCase() === "set-cookie") {
+                // We may have gotten a comma joined string of cookies, or multiple
+                // set-cookie headers. We need to merge them into one header array
+                // to represent all the cookies.
+                cookies.push(...splitCookiesString(value));
+                nodeHeaders[key] = cookies.length === 1 ? cookies[0] : cookies;
+            } else {
+                nodeHeaders[key] = value;
+            }
+        }
+    }
+    return nodeHeaders;
+}
+function validateURL(url) {
+    try {
+        return String(new URL(String(url)));
+    } catch (error) {
+        throw new Error(`URL is malformed "${String(url)}". Please use only absolute URLs - https://nextjs.org/docs/messages/middleware-relative-urls`, {
+            cause: error
+        });
+    }
 }
 
 //# sourceMappingURL=utils.js.map
